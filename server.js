@@ -42,12 +42,17 @@ Voici le texte :
 ${texte}
 \`\`\`
 `;
-
+   
     const configuration = new Configuration({
       apiKey: process.env.OPENAI_API_KEY,
     });
-    const openai = new OpenAIApi(configuration);
 
+    if (!configuration.apiKey) {
+      console.error("❌ Clé OpenAI manquante !");
+      return res.status(500).json({ error: "Clé OpenAI manquante" });
+    }
+
+    const openai = new OpenAIApi(configuration);
     const completion = await openai.createChatCompletion({
       model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
@@ -56,16 +61,16 @@ ${texte}
 
     const raw = completion.data.choices[0].message.content;
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: "Réponse IA invalide" });
+    if (!jsonMatch) {
+      console.error("❌ JSON invalide :", raw);
+      return res.status(500).json({ error: "Réponse IA invalide" });
+    }
 
     const data = JSON.parse(jsonMatch[0]);
     res.json(data);
+
   } catch (error) {
-    console.error("Erreur serveur :", error);
+    console.error("❌ Erreur serveur :", error); // 👈 ajoute ceci
     res.status(500).json({ error: "Erreur interne" });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Serveur actif sur le port ${PORT}`);
 });
