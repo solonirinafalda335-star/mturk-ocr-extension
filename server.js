@@ -67,5 +67,5 @@ ${texte}
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Serveur actif sur http://localhost:${PORT}`);
+  console.log(`✅ Serveur actif sur le port ${PORT}`);
 });
