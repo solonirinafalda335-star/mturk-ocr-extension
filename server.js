@@ -22,7 +22,7 @@ app.post('/api/enhance-text', async (req, res) => {
     const { text } = req.body;
 
     const response = await cohere.generate({
-      model: 'command-r',
+      model: 'command',
       prompt: `Corrige et structure ce texte issu d’un reçu OCR pour l’analyse :\n\n${text}`,
       max_tokens: 500,
       temperature: 0.3,
