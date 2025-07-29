@@ -20,9 +20,9 @@ const cohere = new CohereClient({
  * - Corrige apostrophes dans les nombres (ex: 1'05 → 1.05)
  * - Supprime caractères non ASCII
  * - Supprime virgules en fin d'objet et en fin de tableau
+ * - Ajoute des virgules manquantes entre objets JSON adjacents dans les tableaux
  * - Force les champs simples en string (pour éviter les erreurs JSON)
  * - Nettoie spécifiquement les champs "price" et "quantity"
- * - Ajoute des virgules manquantes entre objets JSON adjacents dans les tableaux
  */
 function sanitizeJSONText(rawText) {
   let text = rawText;
