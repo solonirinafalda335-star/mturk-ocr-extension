@@ -11,6 +11,9 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
+// 🔍 Log de la clé pour vérifier que Render la voit bien (ne pas faire en prod)
+console.log('🔑 Clé Cohere détectée ?', !!process.env.COHERE_API_KEY);
+
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
@@ -19,9 +22,13 @@ app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
 
-    if (!text) return res.status(400).json({ error: 'Le champ "text" est requis' });
+    if (!text) {
+      console.warn("❌ Requête sans 'text' !");
+      return res.status(400).json({ error: 'Le champ "text" est requis' });
+    }
 
-    // Prompt pour demander un JSON strictement
+    console.log("📩 Texte OCR reçu :", text.slice(0, 300) + '...');
+
     const prompt = `
 Voici un texte brut OCR extrait d’une facture.
 Merci de me fournir un JSON structuré avec les champs suivants :
@@ -54,21 +61,28 @@ ${text}
       stop_sequences: ["\n\n"],
     });
 
-    const rawText = response.generations[0].text.trim();
+    console.log("✅ Réponse brute de Cohere reçue.");
 
-    // Essayer de parser le JSON renvoyé par l'IA
+    const rawText = response.generations?.[0]?.text?.trim();
+    if (!rawText) {
+      console.error("⚠️ Réponse IA vide ou mal formée :", response);
+      return res.status(500).json({ error: "Réponse IA vide ou mal formée", response });
+    }
+
+    console.log("🧠 Texte IA retourné :", rawText.slice(0, 300) + '...');
+
     let jsonResult;
     try {
       jsonResult = JSON.parse(rawText);
     } catch (e) {
-      // En cas d’échec, renvoyer rawText pour debug
+      console.error("❌ JSON invalide, texte brut IA :", rawText);
       return res.status(500).json({ error: 'Erreur parsing JSON IA', rawText });
     }
 
     res.json(jsonResult);
   } catch (error) {
-    console.error('Erreur côté serveur :', error);
-    res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
+    console.error('❌ Erreur serveur finale :', error);
+    res.status(500).json({ error: 'Erreur lors de la génération Cohere', details: error.message });
   }
 });
 
