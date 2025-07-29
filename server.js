@@ -2,21 +2,25 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { Configuration, OpenAIApi } = require("openai");
+const session = require('express-session');
+const { CohereClient } = require("cohere-ai");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ✅ Vérifie si la clé API est bien définie
-if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ ERREUR : La variable OPENAI_API_KEY est absente !");
-  process.exit(1); // Stoppe l'app pour Render
-}
-
 app.use(bodyParser.json());
 app.use(cors({ origin: "*", credentials: true }));
+app.use(session({
+  secret: 'secret',
+  resave: false,
+  saveUninitialized: true,
+}));
 
-// ✅ Route IA
+// ✅ Crée une instance de client Cohere (nouveau format)
+const cohere = new CohereClient({
+  token: process.env.COHERE_API_KEY,
+});
+
 app.post('/api/ameliorer', async (req, res) => {
   try {
     const texte = req.body.texte;
@@ -44,30 +48,25 @@ ${texte}
 \`\`\`
 `;
 
-    const configuration = new Configuration({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    const openai = new OpenAIApi(configuration);
-
-    const completion = await openai.createChatCompletion({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
+    const response = await cohere.generate({
+      model: 'command-r',
+      prompt: prompt,
+      maxTokens: 500,
+      temperature: 0.2,
     });
 
-    const raw = completion.data.choices[0].message.content;
+    const raw = response.generations[0].text;
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: "Réponse IA invalide" });
 
     const data = JSON.parse(jsonMatch[0]);
     res.json(data);
   } catch (error) {
-    console.error("❌ Erreur serveur :", error?.response?.data || error.message);
-    res.status(500).json({ error: "Erreur interne du serveur IA" });
+    console.error("Erreur serveur :", error);
+    res.status(500).json({ error: "Erreur interne IA" });
   }
 });
 
-// ✅ Démarrage
 app.listen(PORT, () => {
-  console.log(`✅ Serveur actif sur http://localhost:${PORT}`);
+  console.log(`✅ Serveur actif sur le port ${PORT}`);
 });
