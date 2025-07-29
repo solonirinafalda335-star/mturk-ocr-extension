@@ -22,7 +22,7 @@ const cohere = new CohereClient({
  * - Supprime virgules en fin d'objet et en fin de tableau
  * - Ajoute des virgules manquantes entre objets JSON adjacents dans les tableaux
  * - Force les champs simples en string (pour éviter les erreurs JSON)
- * - Nettoie spécifiquement les champs "price" et "quantity"
+ * - Nettoie spécifiquement les champs "price", "quantity", "purchaseDate", "purchaseTime" et "totalPaid"
  */
 function sanitizeJSONText(rawText) {
   let text = rawText;
@@ -47,6 +47,25 @@ function sanitizeJSONText(rawText) {
   text = text.replace(/("quantity"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
     const digits = p2.match(/\d+/);
     return digits ? `${p1}${digits[0]}` : `${p1}null`;
+  });
+
+  // Nettoyage spécifique "purchaseDate" (format mm/dd/yyyy)
+  text = text.replace(/("purchaseDate"\s*:\s*)"([^"]*)"/g, (match, p1, p2) => {
+    const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+    return datePattern.test(p2) ? `${p1}"${p2}"` : `${p1}null`;
+  });
+
+  // Nettoyage spécifique "purchaseTime" (HH:MM AM/PM)
+  text = text.replace(/("purchaseTime"\s*:\s*)"([^"]*)"/g, (match, p1, p2) => {
+    const timePattern = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s?(AM|PM)$/i;
+    return timePattern.test(p2) ? `${p1}"${p2}"` : `${p1}null`;
+  });
+
+  // Nettoyage spécifique "totalPaid"
+  text = text.replace(/("totalPaid"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
+    let sanitized = p2.replace(/,/g, '.').replace(/[^\d\.\-]/g, '');
+    if (isNaN(Number(sanitized)) || sanitized === '') sanitized = 'null';
+    return `${p1}${sanitized === 'null' ? sanitized : `"${sanitized}"`}`;
   });
 
   return text;
@@ -113,6 +132,7 @@ ${text}
       jsonResult = JSON.parse(cleanedJsonString);
     } catch (e) {
       console.error('⛔ Erreur parsing JSON IA après nettoyage:', e.message);
+      console.error('Chaîne JSON nettoyée:', cleanedJsonString);
       return res.status(500).json({ error: 'Erreur parsing JSON IA après nettoyage', rawText, cleanedJsonString });
     }
 
