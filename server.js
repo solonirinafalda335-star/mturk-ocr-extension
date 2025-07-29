@@ -37,7 +37,7 @@ function sanitizeJSONText(rawText) {
     .replace(/,\s*}/g, '}')                          // Supprime virgule avant }
     .replace(/,\s*]/g, ']')                          // Supprime virgule avant ]
     .replace(/}\s*{/g, '},{')                        // Ajoute virgule manquante entre objets adjacents
-    .replace(/:\s*([^",{}\[\]\s]+)/g, ': "$1"');     // Force champs simples en string
+    .replace(/:\s*([a-zA-Z][^",{}\[\]\s]*)/g, ': "$1"'); // Force strings sans affecter null/number
 
   // Nettoyage spécifique "price"
   text = text.replace(/("price"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
@@ -74,6 +74,28 @@ function sanitizeJSONText(rawText) {
   return text;
 }
 
+// 🔍 Endpoint test local du nettoyage JSON
+app.post('/api/test-cleanup', (req, res) => {
+  const { rawJson } = req.body;
+
+  if (!rawJson || typeof rawJson !== 'string') {
+    return res.status(400).json({ error: 'Le champ "rawJson" est requis et doit être une chaîne' });
+  }
+
+  try {
+    const cleaned = sanitizeJSONText(rawJson);
+    const parsed = JSON.parse(cleaned);
+    return res.json({ parsed, cleaned });
+  } catch (e) {
+    return res.status(500).json({
+      error: 'Erreur parsing après nettoyage',
+      message: e.message,
+      cleanedAttempt: sanitizeJSONText(rawJson)
+    });
+  }
+});
+
+// 🔁 Endpoint principal OCR Cohere
 app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
