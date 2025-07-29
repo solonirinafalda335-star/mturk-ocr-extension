@@ -15,29 +15,26 @@ const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
 
-/**
- * Nettoie la chaîne JSON brute renvoyée par l'IA pour améliorer
- * la chance de parser un JSON valide.
- * Corrige notamment :
- * - Virgules en points dans les nombres (price)
- * - Met null dans quantity si ce n'est pas un entier valide
- * - Supprime les unités ou textes non numériques dans price
- */
+// 🔧 Nettoyage complet de texte JSON brut généré par l'IA
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
-  // Remplacer les nombres avec virgules par des nombres avec points dans "price"
+  // Nettoyage général
+  text = text
+    .replace(/(\d+)'(\d+)/g, '$1.$2')                // Ex: 1'05 → 1.05
+    .replace(/[^\x00-\x7F]+/g, '')                   // Supprime caractères spéciaux
+    .replace(/,\s*}/g, '}')                          // Supprime virgule avant }
+    .replace(/:\s*([^",{}\[\]\s]+)/g, ': "$1"');     // Force champs simples en string
+
+  // Nettoyage spécifique "price"
   text = text.replace(/("price"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
-    // Extraire uniquement chiffres, points et signe - dans la valeur
     let sanitized = p2.replace(/,/g, '.').replace(/[^\d\.\-]/g, '');
-    // Si le résultat n'est pas un nombre valide, mettre null
     if (isNaN(Number(sanitized)) || sanitized === '') sanitized = 'null';
     return `${p1}${sanitized === 'null' ? sanitized : `"${sanitized}"`}`;
   });
 
-  // Nettoyer "quantity", garder que des nombres entiers, sinon null
+  // Nettoyage spécifique "quantity"
   text = text.replace(/("quantity"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
-    // Garde uniquement les chiffres
     const digits = p2.match(/\d+/);
     return digits ? `${p1}${digits[0]}` : `${p1}null`;
   });
@@ -86,14 +83,12 @@ ${text}
     });
 
     const rawText = response.generations?.[0]?.text?.trim();
-
     console.log('🔍 Réponse brute Cohere :', rawText);
 
     if (!rawText) {
       return res.status(500).json({ error: 'Réponse vide de Cohere' });
     }
 
-    // Extraction JSON brute
     const firstBrace = rawText.indexOf('{');
     const lastBrace = rawText.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1) {
@@ -101,8 +96,6 @@ ${text}
     }
 
     const jsonString = rawText.substring(firstBrace, lastBrace + 1);
-
-    // Nettoyage avant parsing
     const cleanedJsonString = sanitizeJSONText(jsonString);
 
     let jsonResult;
@@ -110,7 +103,7 @@ ${text}
       jsonResult = JSON.parse(cleanedJsonString);
     } catch (e) {
       console.error('⛔ Erreur parsing JSON IA après nettoyage:', e.message);
-      return res.status(500).json({ error: 'Erreur parsing JSON IA', rawText, cleanedJsonString });
+      return res.status(500).json({ error: 'Erreur parsing JSON IA après nettoyage', rawText, cleanedJsonString });
     }
 
     return res.json(jsonResult);
