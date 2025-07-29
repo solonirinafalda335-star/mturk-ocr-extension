@@ -1,23 +1,23 @@
 {
   "name": "mturk-ocr-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "API Node.js pour améliorer l’OCR des reçus avec Cohere",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "ocr",
+    "cohere",
+    "nodejs",
+    "api"
+  ],
+  "author": "TonNom",
+  "license": "MIT",
   "dependencies": {
-    "bcrypt": "^6.0.0",
     "cohere-ai": "^7.18.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
-    "express": "^5.1.0",
-    "express-session": "^1.18.2",
-    "openai": "^5.10.2",
-    "pg": "^8.16.3"
+    "express": "^5.1.0"
   }
 }

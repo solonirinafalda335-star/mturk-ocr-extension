@@ -15,7 +15,15 @@ const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
 
-// 🔧 Nettoyage complet de texte JSON brut généré par l'IA
+/**
+ * Nettoyage complet de texte JSON brut généré par l'IA
+ * - Corrige apostrophes dans les nombres (ex: 1'05 → 1.05)
+ * - Supprime caractères non ASCII
+ * - Supprime virgules en fin d'objet et en fin de tableau
+ * - Force les champs simples en string (pour éviter les erreurs JSON)
+ * - Nettoie spécifiquement les champs "price" et "quantity"
+ * - Ajoute des virgules manquantes entre objets JSON adjacents dans les tableaux
+ */
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
@@ -24,6 +32,8 @@ function sanitizeJSONText(rawText) {
     .replace(/(\d+)'(\d+)/g, '$1.$2')                // Ex: 1'05 → 1.05
     .replace(/[^\x00-\x7F]+/g, '')                   // Supprime caractères spéciaux
     .replace(/,\s*}/g, '}')                          // Supprime virgule avant }
+    .replace(/,\s*]/g, ']')                          // Supprime virgule avant ]
+    .replace(/}\s*{/g, '},{')                        // Ajoute virgule manquante entre objets adjacents
     .replace(/:\s*([^",{}\[\]\s]+)/g, ': "$1"');     // Force champs simples en string
 
   // Nettoyage spécifique "price"
