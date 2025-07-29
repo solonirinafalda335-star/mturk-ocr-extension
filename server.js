@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ override: false });
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
@@ -42,7 +42,7 @@ Voici le texte :
 ${texte}
 \`\`\`
 `;
-   
+   console.log("🔐 Clé OpenAI : ", process.env.OPENAI_API_KEY ? "OK" : "❌ Manquante");
     const configuration = new Configuration({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -54,7 +54,7 @@ ${texte}
 
     const openai = new OpenAIApi(configuration);
     const completion = await openai.createChatCompletion({
-      model: "gpt-4o",
+      model: "gpt-3.5-turbo",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
     });
