@@ -19,8 +19,8 @@ app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ error: 'Le champ "text" est requis' });
+    if (!text || typeof text !== 'string' || text.trim() === '') {
+      return res.status(400).json({ error: 'Le champ "text" est requis et doit être une chaîne non vide' });
     }
 
     const prompt = `
@@ -55,20 +55,35 @@ ${text}
       stop_sequences: ["\n\n"],
     });
 
-    const rawText = response.generations[0].text.trim();
+    const rawText = response.generations?.[0]?.text?.trim();
 
-    // Essaye de parser la réponse
+    console.log('🔍 Réponse brute Cohere :', rawText);
+
+    if (!rawText) {
+      return res.status(500).json({ error: 'Réponse vide de Cohere' });
+    }
+
+    // Tenter d'extraire proprement un JSON même s'il y a du texte autour
     let jsonResult;
     try {
-      jsonResult = JSON.parse(rawText);
+      // Trouver premier et dernier accolade pour extraire JSON
+      const firstBrace = rawText.indexOf('{');
+      const lastBrace = rawText.lastIndexOf('}');
+      if (firstBrace === -1 || lastBrace === -1) {
+        throw new Error('Pas de JSON détecté dans la réponse');
+      }
+      const jsonString = rawText.substring(firstBrace, lastBrace + 1);
+      jsonResult = JSON.parse(jsonString);
     } catch (e) {
+      console.error('⛔ Erreur parsing JSON IA:', e.message);
       return res.status(500).json({ error: 'Erreur parsing JSON IA', rawText });
     }
 
-    res.json(jsonResult);
+    return res.json(jsonResult);
+
   } catch (error) {
-    console.error('Erreur côté serveur :', error);
-    res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
+    console.error('❌ Erreur côté serveur :', error);
+    return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
   }
 });
 
