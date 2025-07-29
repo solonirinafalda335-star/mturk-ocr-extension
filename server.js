@@ -1,4 +1,10 @@
 require('dotenv').config({ override: false });
+
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ OPENAI_API_KEY est introuvable !");
+  process.exit(1); // arrête le serveur si la clé est absente
+}
+
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
@@ -47,18 +53,16 @@ ${texte}
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    if (!configuration.apiKey) {
-      console.error("❌ Clé OpenAI manquante !");
-      return res.status(500).json({ error: "Clé OpenAI manquante" });
-    }
-
-    const openai = new OpenAIApi(configuration);
-    const completion = await openai.createChatCompletion({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-    });
-
+    try {
+  const completion = await openai.createChatCompletion({
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.1,
+  });
+} catch (error) {
+  console.error("❌ Erreur OpenAI :", error.response?.data || error.message);
+  return res.status(500).json({ error: "Erreur OpenAI" });
+}
     const raw = completion.data.choices[0].message.content;
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
