@@ -17,15 +17,18 @@ const cohere = new CohereClient({
 
 /**
  * Nettoyage complet de texte JSON brut généré par l'IA
- * - Corrige apostrophes dans les nombres (ex: 1'05 → 1.05)
- * - Supprime caractères non ASCII
- * - Supprime virgules en fin d'objet et en fin de tableau
- * - Ajoute des virgules manquantes entre objets JSON adjacents dans les tableaux
- * - Force les champs simples en string (pour éviter les erreurs JSON)
- * - Nettoie spécifiquement les champs "price", "quantity", "purchaseDate", "purchaseTime" et "totalPaid"
  */
 function sanitizeJSONText(rawText) {
   let text = rawText;
+
+  // 🔧 Correction des valeurs malformées comme "null45\" AM"
+  text = text.replace(/:\s*null(\d{1,2})(:?(\d{2}))?"?\s*(AM|PM)?/gi, (match, h, sep, m, suffix) => {
+    if (h && m && suffix) return `: "${h}:${m} ${suffix.toUpperCase()}"`;
+    return ': null';
+  });
+
+  // 🔧 Correction brute de champs contenant "null" suivi de texte non JSON
+  text = text.replace(/:\s*null[^,\}\]\n"]*/g, ': null');
 
   // Nettoyage général
   text = text
