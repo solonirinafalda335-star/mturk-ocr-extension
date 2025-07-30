@@ -34,9 +34,9 @@
       color: #4A148C;
     }
 
-    form, .code-list {
+    form, .code-list, .stats {
       max-width: 600px;
-      margin: 0 auto;
+      margin: 20px auto;
       background: white;
       padding: 20px;
       border-radius: 8px;
@@ -55,6 +55,7 @@
     button {
       background-color: #4caf50;
       color: white;
+      cursor: pointer;
     }
 
     .code-list table {
@@ -72,6 +73,11 @@
     .status-used { color: red; }
     .status-active { color: green; }
     .status-expired { color: orange; }
+
+    tr.expiring {
+      background-color: #fff3cd;
+      border-left: 4px solid #ff9800;
+    }
   </style>
 </head>
 <body>
@@ -91,6 +97,14 @@
   <!-- 🎛️ Panneau Admin -->
   <div id="adminPanel" class="hidden">
     <h1>🎛️ Panneau Admin - Gestion des Codes</h1>
+
+    <div class="stats">
+      <p><strong>Total :</strong> <span id="totalCount">0</span></p>
+      <p><strong>Actifs :</strong> <span id="activeCount">0</span></p>
+      <p><strong>Expirés :</strong> <span id="expiredCount">0</span></p>
+      <p><strong>Utilisés :</strong> <span id="usedCount">0</span></p>
+    </div>
+
     <form id="generateForm">
       <label>Nombre de codes à générer :</label>
       <input type="number" id="count" min="1" max="500" value="10" required />
@@ -104,8 +118,16 @@
       <button type="submit">🚀 Générer les codes</button>
     </form>
 
+    <form id="createAdminForm">
+      <h3>➕ Ajouter un nouvel administrateur</h3>
+      <input type="text" id="newUsername" placeholder="Nom d’utilisateur admin" required />
+      <input type="password" id="newPassword" placeholder="Mot de passe" required />
+      <button type="submit">🧑‍💼 Créer l’admin</button>
+    </form>
+
     <div class="code-list">
       <h2>📋 Liste des codes</h2>
+      <button onclick="fetchCodes()">🔄 Actualiser la liste</button>
       <table id="codeTable">
         <thead>
           <tr>
@@ -134,13 +156,26 @@
         }
       });
       const codes = await res.json();
+
+      // Stats
+      document.getElementById("totalCount").innerText = codes.length;
+      document.getElementById("activeCount").innerText = codes.filter(c => c.status === "active").length;
+      document.getElementById("expiredCount").innerText = codes.filter(c => c.status === "expired").length;
+      document.getElementById("usedCount").innerText = codes.filter(c => c.status === "used").length;
+
       tableBody.innerHTML = '';
       codes.forEach(code => {
         const row = document.createElement('tr');
+
+        const expireDate = new Date(code.expiresAt);
+        const isExpiringSoon = (expireDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24) <= 3;
+
+        if (isExpiringSoon) row.classList.add("expiring");
+
         row.innerHTML = `
           <td>${code.code}</td>
           <td>${new Date(code.createdAt).toLocaleDateString()}</td>
-          <td>${new Date(code.expiresAt).toLocaleDateString()}</td>
+          <td>${expireDate.toLocaleDateString()}</td>
           <td class="status-${code.status}">${code.status}</td>
           <td>${code.deviceId || '-'}</td>
         `;
@@ -184,6 +219,29 @@
         alert("Identifiants incorrects !");
       }
     };
+
+    document.getElementById("createAdminForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const newUsername = document.getElementById("newUsername").value;
+      const newPassword = document.getElementById("newPassword").value;
+
+      const res = await fetch(`${BASE_URL}/api/admin/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ username: newUsername, password: newPassword })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ Nouvel admin créé !");
+        document.getElementById("createAdminForm").reset();
+      } else {
+        alert("❌ Erreur : " + (data.message || "Création échouée"));
+      }
+    });
   </script>
 </body>
 </html>
