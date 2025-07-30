@@ -11,8 +11,6 @@ dotenv.config();
 
 const app = express(); // ← initialiser app ici
 
-const PORT = process.env.PORT|| 3000;
-
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -233,6 +231,8 @@ ${text}
 });
 
 // 🚀 Démarrage serveur
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log(`✅ Serveur actif sur le port ${port}`);
+  console.log(`✅ Serveur actif sur le port ${PORT}`);
 });
