@@ -1,13 +1,13 @@
 // server.js
-
+app.use(express.static(path.join(__dirname, 'public')));
 const express = require('express');
+const path = require('path');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const { CohereClient } = require('cohere-ai');
-
 dotenv.config();
 
 const app = express();
@@ -46,45 +46,14 @@ licenseSchema.virtual('status').get(function () {
 const License = mongoose.model('License', licenseSchema);
 
 // --- API Licences ---
-app.post('/api/admin/generate', async (req, res) => {
-  const { count, durationDays } = req.body;
-  if (!count || !durationDays) return res.status(400).json({ error: 'Count et durationDays requis' });
+app.post('/api/admin/login', async (req, res) => {
+  const { username, password } = req.body;
 
-  const codes = [];
-  for (let i = 0; i < count; i++) {
-    const code = uuidv4().split('-')[0].toUpperCase();
-    codes.push({ code, durationDays });
+  if (username === "Mturk-OCR" && password === "Solonirina93") {
+    res.json({ success: true, token: "admin-token" }); // ou mieux : un vrai JWT plus tard
+  } else {
+    res.status(401).json({ success: false, message: "Identifiants incorrects" });
   }
-
-  try {
-    const created = await License.insertMany(codes);
-    return res.json({ success: true, created });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/validate', async (req, res) => {
-  const { code, deviceId } = req.body;
-  if (!code || !deviceId) return res.status(400).json({ error: 'Code et deviceId requis' });
-
-  const license = await License.findOne({ code });
-  if (!license) return res.status(404).json({ valid: false, reason: 'Code introuvable' });
-
-  const now = new Date();
-  const expired = now > license.expiresAt;
-
-  if (expired) return res.json({ valid: false, reason: 'Code expiré' });
-  if (license.deviceId && license.deviceId !== deviceId)
-    return res.json({ valid: false, reason: 'Ce code est déjà utilisé sur un autre appareil' });
-
-  if (!license.deviceId) {
-    license.deviceId = deviceId;
-    license.usedAt = now;
-    await license.save();
-  }
-
-  return res.json({ valid: true, expiresAt: license.expiresAt });
 });
 
 app.get('/api/admin/licenses', async (req, res) => {
@@ -248,57 +217,6 @@ ${text}
     console.error('❌ Erreur côté serveur :', error);
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
   }
-});
-
-// ✅ Login admin
-app.post('/api/admin-login', async (req, res) => {
-  const { password } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ success: false, message: 'Mot de passe requis' });
-  }
-
-  try {
-    const isValid = await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH);
-
-    if (isValid) {
-      return res.json({ success: true, message: 'Connexion réussie 🎉' });
-    } else {
-      return res.status(401).json({ success: false, message: 'Mot de passe incorrect ❌' });
-    }
-  } catch (err) {
-    return res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-});
-
-// 🧪 Test HTML simple
-app.get('/admin', (req, res) => {
-  res.send(`
-    <html>
-      <head><title>Admin Login</title></head>
-      <body style="font-family: sans-serif; padding: 2rem;">
-        <h2>Connexion Admin</h2>
-        <form onsubmit="login(event)">
-          <input type="password" id="password" placeholder="Mot de passe" required />
-          <button type="submit">Se connecter</button>
-        </form>
-        <pre id="result"></pre>
-        <script>
-          async function login(e) {
-            e.preventDefault();
-            const password = document.getElementById('password').value;
-            const res = await fetch('/api/admin-login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ password }),
-            });
-            const data = await res.json();
-            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
-          }
-        </script>
-      </body>
-    </html>
-  `);
 });
 
 // 🚀 Démarrage serveur
