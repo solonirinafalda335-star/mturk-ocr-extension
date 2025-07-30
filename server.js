@@ -233,10 +233,3 @@ ${text}
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
   }
 });
-
-// 🚀 Démarrage serveur
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`✅ Serveur actif sur le port ${PORT}`);
-});
