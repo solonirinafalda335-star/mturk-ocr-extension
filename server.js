@@ -1,5 +1,4 @@
 // server.js
-app.use(express.static(path.join(__dirname, 'public')));
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
@@ -8,13 +7,16 @@ const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const { CohereClient } = require('cohere-ai');
+
 dotenv.config();
 
-const app = express();
-const port = process.env.PORT || 10000;
+const app = express(); // 💡 D'abord créer app ici
+const port = process.env.PORT; // Pas de fallback à 10000 pour Render
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
 
 // --- MongoDB Setup ---
 mongoose.connect(process.env.MONGO_URI, {
