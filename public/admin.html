@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panneau Admin</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f4f6f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .logout, .create-btn, .export-btn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .logout {
+      background: #d32f2f;
+      color: white;
+    }
+    .create-btn {
+      background: #1976d2;
+      color: white;
+    }
+    .export-btn {
+      background: #388e3c;
+      color: white;
+    }
+    .search-input {
+      padding: 8px;
+      width: 250px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      flex-grow: 1;
+      min-width: 200px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background: #1976d2;
+      color: white;
+      cursor: pointer;
+      user-select: none;
+    }
+    tr:hover {
+      background: #f1f1f1;
+    }
+    .delete-btn {
+      background: #f44336;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .delete-btn:hover {
+      background: #d32f2f;
+    }
+    .stats {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-weight: bold;
+      color: #555;
+    }
+    .stat-item {
+      background: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.1);
+      min-width: 140px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 Espace Admin</h1>
+  
+  <div class="topbar">
+    <input class="search-input" id="searchBox" placeholder="🔍 Rechercher un code..." oninput="filterTable()" />
+    <div class="actions">
+      <button class="create-btn" onclick="createLicense(7)">Créer code gratuit (7 jours)</button>
+      <button class="create-btn" onclick="createLicense(30)">Créer code payant (30 jours)</button>
+      <button class="export-btn" onclick="exportCSV()">Exporter CSV</button>
+      <button class="logout" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>
+
+  <div class="stats" id="statsContainer">
+    <div class="stat-item" id="totalCount">Total : 0</div>
+    <div class="stat-item" id="validCount">Validés : 0</div>
+    <div class="stat-item" id="expiredCount">Expirés : 0</div>
+    <div class="stat-item" id="usedCount">Utilisés : 0</div>
+  </div>
+
+  <table id="licensesTable">
+    <thead>
+      <tr>
+        <th data-sort="code" onclick="sortTable('code')">Code ▲▼</th>
+        <th data-sort="expires" onclick="sortTable('expires')">Expiration ▲▼</th>
+        <th>Jours restants</th>
+        <th data-sort="valid" onclick="sortTable('valid')">Valide ▲▼</th>
+        <th data-sort="used" onclick="sortTable('used')">Utilisé ▲▼</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    let licensesData = {};
+    let currentSort = { key: 'expires', asc: true };
+
+    async function fetchLicenses() {
+      const res = await fetch('/api/licenses');
+      licensesData = await res.json();
+      renderTable();
+      updateStats();
+    }
+
+    function renderTable() {
+      const tbody = document.querySelector('#licensesTable tbody');
+      tbody.innerHTML = '';
+
+      // Convert licensesData to array with sorting
+      let entries = Object.entries(licensesData).map(([code, info]) => ({ code, ...info }));
+
+      entries.sort((a, b) => {
+        let valA = a[currentSort.key];
+        let valB = b[currentSort.key];
+
+        // For booleans, convert to numbers
+        if (typeof valA === 'boolean') valA = valA ? 1 : 0;
+        if (typeof valB === 'boolean') valB = valB ? 1 : 0;
+
+        // For dates, convert to Date
+        if (currentSort.key === 'expires') {
+          valA = new Date(valA);
+          valB = new Date(valB);
+        }
+
+        if (valA < valB) return currentSort.asc ? -1 : 1;
+        if (valA > valB) return currentSort.asc ? 1 : -1;
+        return 0;
+      });
+
+      const today = new Date();
+
+      entries.forEach(({ code, expires, valid, used }) => {
+        const expireDate = new Date(expires);
+        const timeDiff = expireDate - today;
+        const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${code}</td>
+          <td>${expires}</td>
+          <td>${daysLeft >= 0 ? daysLeft + ' jour(s)' : '❌ Expiré'}</td>
+          <td>${valid ? '✅' : '❌'}</td>
+          <td>${used ? '✅' : '❌'}</td>
+          <td><button class="delete-btn" onclick="deleteCode('${code}')">🗑 Supprimer</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      filterTable(); // appliquer filtre après rendu
+    }
+
+    async function deleteCode(code) {
+      if (confirm(`🗑 Supprimer le code ${code} ?`)) {
+        await fetch(`/api/licenses/${code}`, { method: 'DELETE' });
+        await fetchLicenses();
+      }
+    }
+
+    async function createLicense(days) {
+      const res = await fetch('/api/licenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration: days })
+      });
+      const result = await res.json();
+      alert(`✅ Nouveau code généré : ${result.code} (Expire le ${result.expires})`);
+      await fetchLicenses();
+    }
+
+    function logout() {
+      window.location.href = '/logout';
+    }
+
+    function filterTable() {
+      const query = document.getElementById("searchBox").value.toLowerCase();
+      const rows = document.querySelectorAll("#licensesTable tbody tr");
+      rows.forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(query) ? '' : 'none';
+      });
+    }
+
+    function updateStats() {
+      const total = Object.keys(licensesData).length;
+      const valid = Object.values(licensesData).filter(l => l.valid).length;
+      const expired = Object.values(licensesData).filter(l => {
+        const expireDate = new Date(l.expires);
+        return expireDate < new Date();
+      }).length;
+      const used = Object.values(licensesData).filter(l => l.used).length;
+
+      document.getElementById('totalCount').textContent = `Total : ${total}`;
+      document.getElementById('validCount').textContent = `Validés : ${valid}`;
+      document.getElementById('expiredCount').textContent = `Expirés : ${expired}`;
+      document.getElementById('usedCount').textContent = `Utilisés : ${used}`;
+    }
+
+    function exportCSV() {
+      let csv = 'Code,Expiration,Jours restants,Valide,Utilisé\n';
+      const today = new Date();
+
+      Object.entries(licensesData).forEach(([code, info]) => {
+        const expireDate = new Date(info.expires);
+        const timeDiff = expireDate - today;
+        const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+        csv += [
+          code,
+          info.expires,
+          daysLeft >= 0 ? daysLeft + ' jour(s)' : 'Expiré',
+          info.valid ? 'Oui' : 'Non',
+          info.used ? 'Oui' : 'Non'
+        ].join(',') + '\n';
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `licenses_export_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function sortTable(key) {
+      if (currentSort.key === key) {
+        currentSort.asc = !currentSort.asc;
+      } else {
+        currentSort.key = key;
+        currentSort.asc = true;
+      }
+      renderTable();
+    }
+
+    fetchLicenses();
+  </script>
+</body>
+</html>

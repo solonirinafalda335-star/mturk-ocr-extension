@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { CohereClient } = require('cohere-ai');
+const bcrypt = require('bcrypt'); // ✅ Ajout ici
 
 dotenv.config();
 
@@ -21,50 +22,42 @@ const cohere = new CohereClient({
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
-  // 🔧 Correction des valeurs malformées comme "null45\" AM"
   text = text.replace(/:\s*null(\d{1,2})(:?(\d{2}))?"?\s*(AM|PM)?/gi, (match, h, sep, m, suffix) => {
     if (h && m && suffix) return `: "${h}:${m} ${suffix.toUpperCase()}"`;
     return ': null';
   });
 
-  // 🔧 Correction brute de champs contenant "null" suivi de texte non JSON
   text = text.replace(/:\s*null[^,\}\]\n"]*/g, ': null');
 
-  // Nettoyage général
   text = text
-    .replace(/(\d+)'(\d+)/g, '$1.$2')                // Ex: 1'05 → 1.05
-    .replace(/[^\x00-\x7F]+/g, '')                   // Supprime caractères spéciaux
-    .replace(/,\s*}/g, '}')                          // Supprime virgule avant }
-    .replace(/,\s*]/g, ']')                          // Supprime virgule avant ]
-    .replace(/}\s*{/g, '},{')                        // Ajoute virgule manquante entre objets adjacents
-    .replace(/:\s*([a-zA-Z][^",{}\[\]\s]*)/g, ': "$1"'); // Force strings sans affecter null/number
+    .replace(/(\d+)'(\d+)/g, '$1.$2')
+    .replace(/[^\x00-\x7F]+/g, '')
+    .replace(/,\s*}/g, '}')
+    .replace(/,\s*]/g, ']')
+    .replace(/}\s*{/g, '},{')
+    .replace(/:\s*([a-zA-Z][^",{}\[\]\s]*)/g, ': "$1"');
 
-  // Nettoyage spécifique "price"
   text = text.replace(/("price"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
     let sanitized = p2.replace(/,/g, '.').replace(/[^\d\.\-]/g, '');
     if (isNaN(Number(sanitized)) || sanitized === '') sanitized = 'null';
     return `${p1}${sanitized === 'null' ? sanitized : `"${sanitized}"`}`;
   });
 
-  // Nettoyage spécifique "quantity"
   text = text.replace(/("quantity"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
     const digits = p2.match(/\d+/);
     return digits ? `${p1}${digits[0]}` : `${p1}null`;
   });
 
-  // Nettoyage spécifique "purchaseDate" (format mm/dd/yyyy)
   text = text.replace(/("purchaseDate"\s*:\s*)"([^"]*)"/g, (match, p1, p2) => {
     const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
     return datePattern.test(p2) ? `${p1}"${p2}"` : `${p1}null`;
   });
 
-  // Nettoyage spécifique "purchaseTime" (HH:MM AM/PM)
   text = text.replace(/("purchaseTime"\s*:\s*)"([^"]*)"/g, (match, p1, p2) => {
     const timePattern = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s?(AM|PM)$/i;
     return timePattern.test(p2) ? `${p1}"${p2}"` : `${p1}null`;
   });
 
-  // Nettoyage spécifique "totalPaid"
   text = text.replace(/("totalPaid"\s*:\s*)"([^"]+)"/g, (match, p1, p2) => {
     let sanitized = p2.replace(/,/g, '.').replace(/[^\d\.\-]/g, '');
     if (isNaN(Number(sanitized)) || sanitized === '') sanitized = 'null';
@@ -166,6 +159,27 @@ ${text}
   } catch (error) {
     console.error('❌ Erreur côté serveur :', error);
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
+  }
+});
+
+// ✅ Connexion admin sécurisée via bcrypt
+app.post('/api/admin-login', async (req, res) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Mot de passe requis' });
+  }
+
+  try {
+    const isValid = await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH);
+
+    if (isValid) {
+      return res.json({ success: true, message: 'Connexion réussie 🎉' });
+    } else {
+      return res.status(401).json({ success: false, message: 'Mot de passe incorrect ❌' });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
