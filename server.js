@@ -52,6 +52,39 @@ licenseSchema.virtual('expiresAt').get(function () {
   return new Date(this.createdAt.getTime() + this.durationDays * 24 * 60 * 60 * 1000);
 });
 
+// ✅ Route d’activation de licence (depuis l’app utilisateur)
+app.post('/api/activate', async (req, res) => {
+  const { code, deviceId } = req.body;
+
+  if (!code || !deviceId) {
+    return res.status(400).json({ success: false, message: 'Code et deviceId requis' });
+  }
+
+  const cleanedCode = code.trim().toUpperCase();
+
+  try {
+    const license = await License.findOne({ code: cleanedCode });
+
+    if (!license) {
+      return res.status(400).json({ success: false, message: '🚫 Code invalide' });
+    }
+
+    if (license.deviceId) {
+      return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé' });
+    }
+
+    license.deviceId = deviceId;
+    license.usedAt = new Date();
+
+    await license.save();
+
+    return res.json({ success: true, message: '✅ Code activé avec succès', expiresAt: license.expiresAt });
+  } catch (error) {
+    console.error('❌ Erreur activation licence :', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 licenseSchema.virtual('status').get(function () {
   const now = new Date();
   if (this.usedAt && !this.deviceId) return 'used';
