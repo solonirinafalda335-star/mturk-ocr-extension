@@ -3,16 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <title>Admin Panel</title>
-  </head>
-</body>
-  <h1>Panneau d’administration MTurk OCR</h1>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     .hidden {
-  display: none !important;
-  visibility: hidden;
-  opacity: 0;
-}
+      display: none !important;
+      visibility: hidden;
+      opacity: 0;
+    }
 
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -82,10 +79,16 @@
     <h1>🎛️ MTurk Admin</h1>
   </header>
 
+  <!-- 🔐 Zone de connexion -->
   <div id="loginBox">
-    <button onclick="login()">🔐 Connexion Admin</button>
+    <form onsubmit="login(event)">
+      <input type="text" id="username" placeholder="Nom d’utilisateur" required />
+      <input type="password" id="password" placeholder="Mot de passe" required />
+      <button type="submit">🔐 Connexion Admin</button>
+    </form>
   </div>
 
+  <!-- 🎛️ Panneau Admin -->
   <div id="adminPanel" class="hidden">
     <h1>🎛️ Panneau Admin - Gestion des Codes</h1>
     <form id="generateForm">
@@ -118,6 +121,7 @@
     </div>
   </div>
 
+  <!-- 🧠 Script JS -->
   <script>
     const BASE_URL = "https://mturk-ocr-extension.onrender.com";
     const form = document.getElementById('generateForm');
@@ -150,17 +154,24 @@
       const durationDays = document.getElementById('duration').value;
       await fetch(`${BASE_URL}/api/admin/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({ count, durationDays })
       });
       await fetchCodes();
     });
 
-    const login = async () => {
+    const login = async (event) => {
+      event.preventDefault();
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
       const res = await fetch(`${BASE_URL}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "Mturk-OCR", password: "Solonirina93@" })
+        body: JSON.stringify({ username, password })
       });
 
       const data = await res.json();
@@ -173,8 +184,6 @@
         alert("Identifiants incorrects !");
       }
     };
-
-    login(); // auto-login
   </script>
 </body>
 </html>
