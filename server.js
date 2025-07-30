@@ -29,6 +29,8 @@ app.get('/admin', (req, res) => {
 mongoose.connect(process.env.MONGO_URL)
   .then(() => {
     console.log('✅ Connexion à MongoDB réussie');
+    
+    const PORT = process.env.PORT || 10000;
     app.listen(PORT, () => {
       console.log(`✅ Serveur actif sur le port ${PORT}`);
     });
