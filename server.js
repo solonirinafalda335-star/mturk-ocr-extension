@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const bcrypt = require('bcrypt');
 const { CohereClient } = require('cohere-ai');
-const bcrypt = require('bcrypt'); // ✅ Ajout ici
 
 dotenv.config();
 
@@ -67,7 +67,7 @@ function sanitizeJSONText(rawText) {
   return text;
 }
 
-// 🔍 Endpoint test local du nettoyage JSON
+// 🔍 Endpoint test nettoyage
 app.post('/api/test-cleanup', (req, res) => {
   const { rawJson } = req.body;
 
@@ -162,7 +162,7 @@ ${text}
   }
 });
 
-// ✅ Connexion admin sécurisée via bcrypt
+// ✅ Vérification du mot de passe admin
 app.post('/api/admin-login', async (req, res) => {
   const { password } = req.body;
 
@@ -181,6 +181,36 @@ app.post('/api/admin-login', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
+});
+
+// 🧪 Interface HTML simple pour tester le login
+app.get('/admin', (req, res) => {
+  res.send(`
+    <html>
+      <head><title>Admin Login</title></head>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h2>Connexion Admin</h2>
+        <form onsubmit="login(event)">
+          <input type="password" id="password" placeholder="Mot de passe" required />
+          <button type="submit">Se connecter</button>
+        </form>
+        <pre id="result"></pre>
+        <script>
+          async function login(e) {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            const res = await fetch('/api/admin-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password }),
+            });
+            const data = await res.json();
+            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+          }
+        </script>
+      </body>
+    </html>
+  `);
 });
 
 app.listen(port, () => {
