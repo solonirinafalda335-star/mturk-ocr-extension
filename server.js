@@ -20,6 +20,10 @@ app.get('/', (req, res) => {
   res.send('API MTurk OCR fonctionne ✅');
 });
 
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // Tu peux ajouter ici tes routes /api/admin/login etc...
 
 mongoose.connect(process.env.MONGO_URL)
