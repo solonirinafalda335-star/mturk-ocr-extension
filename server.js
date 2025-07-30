@@ -29,8 +29,9 @@ app.get('/admin', (req, res) => {
 mongoose.connect(process.env.MONGO_URL)
   .then(() => {
     console.log('✅ Connexion à MongoDB réussie');
-    
+
     const PORT = process.env.PORT || 10000;
+
     app.listen(PORT, () => {
       console.log(`✅ Serveur actif sur le port ${PORT}`);
     });
@@ -234,4 +235,27 @@ ${text}
     console.error('❌ Erreur côté serveur :', error);
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
   }
+});
+// Génération de codes pour l'admin
+app.post('/api/admin/generate', async (req, res) => {
+  const { count, durationDays } = req.body;
+
+  if (!count || !durationDays) {
+    return res.status(400).json({ success: false, message: 'Champs requis manquants' });
+  }
+
+  const codes = [];
+
+  for (let i = 0; i < count; i++) {
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const newLicense = new License({
+      code,
+      durationDays,
+    });
+
+    await newLicense.save();
+    codes.push(newLicense);
+  }
+
+  res.json({ success: true, codes });
 });
