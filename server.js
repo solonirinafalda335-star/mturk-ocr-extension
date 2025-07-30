@@ -1,7 +1,11 @@
+// server.js
+
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+const { v4: uuidv4 } = require('uuid');
 const { CohereClient } = require('cohere-ai');
 
 dotenv.config();
@@ -12,13 +16,97 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
+// --- MongoDB Setup ---
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+const licenseSchema = new mongoose.Schema({
+  code: { type: String, unique: true },
+  durationDays: Number,
+  createdAt: { type: Date, default: Date.now },
+  usedAt: Date,
+  deviceId: String,
+});
+
+licenseSchema.virtual('expiresAt').get(function () {
+  return new Date(this.createdAt.getTime() + this.durationDays * 24 * 60 * 60 * 1000);
+});
+
+licenseSchema.virtual('status').get(function () {
+  const now = new Date();
+  if (this.usedAt && !this.deviceId) return 'used';
+  if (this.deviceId && now > this.expiresAt) return 'expired';
+  if (!this.usedAt && now < this.createdAt) return 'not yet active';
+  if (this.deviceId) return 'used';
+  return 'active';
+});
+
+const License = mongoose.model('License', licenseSchema);
+
+// --- API Licences ---
+app.post('/api/admin/generate', async (req, res) => {
+  const { count, durationDays } = req.body;
+  if (!count || !durationDays) return res.status(400).json({ error: 'Count et durationDays requis' });
+
+  const codes = [];
+  for (let i = 0; i < count; i++) {
+    const code = uuidv4().split('-')[0].toUpperCase();
+    codes.push({ code, durationDays });
+  }
+
+  try {
+    const created = await License.insertMany(codes);
+    return res.json({ success: true, created });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/validate', async (req, res) => {
+  const { code, deviceId } = req.body;
+  if (!code || !deviceId) return res.status(400).json({ error: 'Code et deviceId requis' });
+
+  const license = await License.findOne({ code });
+  if (!license) return res.status(404).json({ valid: false, reason: 'Code introuvable' });
+
+  const now = new Date();
+  const expired = now > license.expiresAt;
+
+  if (expired) return res.json({ valid: false, reason: 'Code expiré' });
+  if (license.deviceId && license.deviceId !== deviceId)
+    return res.json({ valid: false, reason: 'Ce code est déjà utilisé sur un autre appareil' });
+
+  if (!license.deviceId) {
+    license.deviceId = deviceId;
+    license.usedAt = now;
+    await license.save();
+  }
+
+  return res.json({ valid: true, expiresAt: license.expiresAt });
+});
+
+app.get('/api/admin/licenses', async (req, res) => {
+  const licenses = await License.find({}).lean();
+  const now = new Date();
+
+  const enriched = licenses.map(l => ({
+    ...l,
+    expiresAt: new Date(l.createdAt.getTime() + l.durationDays * 86400000),
+    status: l.deviceId
+      ? (now > new Date(l.createdAt.getTime() + l.durationDays * 86400000) ? 'expired' : 'used')
+      : 'active',
+  }));
+
+  return res.json(enriched);
+});
+
+// --- Cohere / AI Setup ---
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
 
-/**
- * Nettoyage complet de texte JSON brut généré par l'IA
- */
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
@@ -67,7 +155,7 @@ function sanitizeJSONText(rawText) {
   return text;
 }
 
-// 🔍 Endpoint test nettoyage
+// 🔍 Test de nettoyage
 app.post('/api/test-cleanup', (req, res) => {
   const { rawJson } = req.body;
 
@@ -88,7 +176,7 @@ app.post('/api/test-cleanup', (req, res) => {
   }
 });
 
-// 🔁 Endpoint principal OCR Cohere
+// 🔁 OCR Cohere
 app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
@@ -162,7 +250,7 @@ ${text}
   }
 });
 
-// ✅ Vérification du mot de passe admin
+// ✅ Login admin
 app.post('/api/admin-login', async (req, res) => {
   const { password } = req.body;
 
@@ -183,7 +271,7 @@ app.post('/api/admin-login', async (req, res) => {
   }
 });
 
-// 🧪 Interface HTML simple pour tester le login
+// 🧪 Test HTML simple
 app.get('/admin', (req, res) => {
   res.send(`
     <html>
@@ -213,6 +301,7 @@ app.get('/admin', (req, res) => {
   `);
 });
 
+// 🚀 Démarrage serveur
 app.listen(port, () => {
   console.log(`✅ Serveur actif sur le port ${port}`);
 });
