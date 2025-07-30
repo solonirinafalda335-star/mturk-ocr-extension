@@ -1,5 +1,4 @@
-// server.js
-const express = require('express');
+const express = require('express'); // ← importer express d'abord
 const path = require('path');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -10,19 +9,31 @@ const { CohereClient } = require('cohere-ai');
 
 dotenv.config();
 
-const app = express(); // 💡 D'abord créer app ici
-const port = process.env.PORT; // Pas de fallback à 10000 pour Render
+const app = express(); // ← initialiser app ici
+
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-
-// --- MongoDB Setup ---
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+// Exemple simple pour tester que ça fonctionne
+app.get('/', (req, res) => {
+  res.send('API MTurk OCR fonctionne ✅');
 });
+
+// Tu peux ajouter ici tes routes /api/admin/login etc...
+
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => {
+    console.log('✅ Connexion à MongoDB réussie');
+    app.listen(PORT, () => {
+      console.log(`✅ Serveur actif sur le port ${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('❌ Erreur de connexion MongoDB :', err);
+  });
 
 const licenseSchema = new mongoose.Schema({
   code: { type: String, unique: true },
