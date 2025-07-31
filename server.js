@@ -97,7 +97,7 @@ app.get('/api/admin/licenses', async (req, res) => {
         : 'active',
     }));
 
-    return res.json(enriched);
+    return res.json({ codes: enriched });
   } catch (error) {
     console.error('❌ Erreur récupération licences :', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });

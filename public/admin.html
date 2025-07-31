@@ -155,7 +155,9 @@
           'Authorization': `Bearer ${localStorage.getItem("token")}`
         }
       });
-      const codes = await res.json();
+
+      const result = await res.json();
+      const codes = result.codes || [];
 
       // Stats
       document.getElementById("totalCount").innerText = codes.length;
