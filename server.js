@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const { CohereClient } = require('cohere-ai');
 
 dotenv.config();
+console.log("✅ MONGO_URL =", process.env.MONGO_URL);
 
 const app = express(); // ← initialiser app ici
 
@@ -63,14 +64,15 @@ app.post('/api/activate', async (req, res) => {
   const cleanedCode = code.trim().toUpperCase();
 
   try {
-    const license = await License.findOne({ code: cleanedCode });
+    const license = await License.findOne({ code });
 
-    if (!license) {
-      return res.status(400).json({ success: false, message: '🚫 Code invalide' });
-    }
+if (!license || license.deviceId) {
+  return res.status(400).json({ error: '🚫 Code invalide ou déjà utilisé.' });
+}
 
-    if (license.deviceId) {
-      return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé' });
+   if (license.deviceId && license.deviceId !== deviceId) {
+  return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé sur un autre appareil' });
+
     }
 
     license.deviceId = deviceId;
