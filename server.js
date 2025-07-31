@@ -1,22 +1,27 @@
-const express = require('express'); // ← importer express d'abord
+const express = require('express');
 const path = require('path');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
+const { PrismaClient } = require('@prisma/client');
 const { CohereClient } = require('cohere-ai');
 
 dotenv.config();
-console.log("✅ MONGO_URL =", process.env.MONGO_URL);
+console.log("✅ DATABASE_URL =", process.env.DATABASE_URL);
 
-const app = express(); // ← initialiser app ici
+const app = express();
+const prisma = new PrismaClient();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Exemple simple pour tester que ça fonctionne
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`✅ Serveur actif sur le port ${PORT}`);
+});
+
 app.get('/', (req, res) => {
   res.send('API MTurk OCR fonctionne ✅');
 });
@@ -25,34 +30,11 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Tu peux ajouter ici tes routes /api/admin/login etc...
+function computeExpiresAt(createdAt, durationDays) {
+  return new Date(createdAt.getTime() + durationDays * 86400000);
+}
 
-mongoose.connect(process.env.MONGO_URL)
-  .then(() => {
-    console.log('✅ Connexion à MongoDB réussie');
-
-    const PORT = process.env.PORT || 10000;
-
-    app.listen(PORT, () => {
-      console.log(`✅ Serveur actif sur le port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('❌ Erreur de connexion MongoDB :', err);
-  });
-
-const licenseSchema = new mongoose.Schema({
-  code: { type: String, unique: true },
-  durationDays: Number,
-  createdAt: { type: Date, default: Date.now },
-  usedAt: Date,
-  deviceId: String,
-});
-
-licenseSchema.virtual('expiresAt').get(function () {
-  return new Date(this.createdAt.getTime() + this.durationDays * 24 * 60 * 60 * 1000);
-});
-
+// --- API Activate License ---
 app.post('/api/activate', async (req, res) => {
   const { code, deviceId } = req.body;
 
@@ -63,7 +45,7 @@ app.post('/api/activate', async (req, res) => {
   const cleanedCode = code.trim().toUpperCase();
 
   try {
-    const license = await License.findOne({ code: cleanedCode }); // ← tu utilisais "code" non nettoyé ici
+    const license = await prisma.license.findUnique({ where: { code: cleanedCode } });
 
     if (!license) {
       return res.status(400).json({ success: false, message: '🚫 Code invalide.' });
@@ -73,60 +55,87 @@ app.post('/api/activate', async (req, res) => {
       return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé sur un autre appareil' });
     }
 
-    license.deviceId = deviceId;
-    license.usedAt = new Date();
+    await prisma.license.update({
+      where: { code: cleanedCode },
+      data: {
+        deviceId,
+        usedAt: new Date(),
+      }
+    });
 
-    await license.save();
+    const expiresAt = computeExpiresAt(license.createdAt, license.durationDays);
 
-    return res.json({ success: true, message: '✅ Code activé avec succès', expiresAt: license.expiresAt });
+    return res.json({ success: true, message: '✅ Code activé avec succès', expiresAt });
   } catch (error) {
     console.error('❌ Erreur activation licence :', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-licenseSchema.virtual('status').get(function () {
-  const now = new Date();
-  if (this.usedAt && !this.deviceId) return 'used';
-  if (this.deviceId && now > this.expiresAt) return 'expired';
-  if (!this.usedAt && now < this.createdAt) return 'not yet active';
-  if (this.deviceId) return 'used';
-  return 'active';
-});
-
-const License = mongoose.model('License', licenseSchema);
-
-// --- API Licences ---
+// --- API Admin Login ---
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
 
   if (username === "Mturk-OCR" && password === "Solonirina93") {
-    res.json({ success: true, token: "admin-token" }); // ou mieux : un vrai JWT plus tard
+    res.json({ success: true, token: "admin-token" });
   } else {
     res.status(401).json({ success: false, message: "Identifiants incorrects" });
   }
 });
 
+// --- API Admin Get Licenses ---
 app.get('/api/admin/licenses', async (req, res) => {
-  const licenses = await License.find({}).lean();
-  const now = new Date();
+  try {
+    const licenses = await prisma.license.findMany();
+    const now = new Date();
 
-  const enriched = licenses.map(l => ({
-    ...l,
-    expiresAt: new Date(l.createdAt.getTime() + l.durationDays * 86400000),
-    status: l.deviceId
-      ? (now > new Date(l.createdAt.getTime() + l.durationDays * 86400000) ? 'expired' : 'used')
-      : 'active',
-  }));
+    const enriched = licenses.map(l => ({
+      ...l,
+      expiresAt: computeExpiresAt(new Date(l.createdAt), l.durationDays),
+      status: l.deviceId
+        ? (now > computeExpiresAt(new Date(l.createdAt), l.durationDays) ? 'expired' : 'used')
+        : 'active',
+    }));
 
-  return res.json(enriched);
+    return res.json(enriched);
+  } catch (error) {
+    console.error('❌ Erreur récupération licences :', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
 });
 
-// --- Cohere / AI Setup ---
+// --- API Admin Generate Licenses ---
+app.post('/api/admin/generate', async (req, res) => {
+  const { count, durationDays } = req.body;
+
+  if (!count || !durationDays) {
+    return res.status(400).json({ success: false, message: 'Champs requis manquants' });
+  }
+
+  const codes = [];
+
+  for (let i = 0; i < count; i++) {
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    const newLicense = await prisma.license.create({
+      data: {
+        code,
+        durationDays,
+      }
+    });
+
+    codes.push(newLicense);
+  }
+
+  res.json({ success: true, codes });
+});
+
+// --- Cohere Setup ---
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
 
+// --- OCR JSON Cleanup ---
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
@@ -175,7 +184,7 @@ function sanitizeJSONText(rawText) {
   return text;
 }
 
-// 🔍 Test de nettoyage
+// --- API OCR Cleanup Test ---
 app.post('/api/test-cleanup', (req, res) => {
   const { rawJson } = req.body;
 
@@ -196,7 +205,7 @@ app.post('/api/test-cleanup', (req, res) => {
   }
 });
 
-// 🔁 OCR Cohere
+// --- API OCR Enhance via Cohere ---
 app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
@@ -238,8 +247,6 @@ ${text}
     });
 
     const rawText = response.generations?.[0]?.text?.trim();
-    console.log('🔍 Réponse brute Cohere :', rawText);
-
     if (!rawText) {
       return res.status(500).json({ error: 'Réponse vide de Cohere' });
     }
@@ -258,7 +265,6 @@ ${text}
       jsonResult = JSON.parse(cleanedJsonString);
     } catch (e) {
       console.error('⛔ Erreur parsing JSON IA après nettoyage:', e.message);
-      console.error('Chaîne JSON nettoyée:', cleanedJsonString);
       return res.status(500).json({ error: 'Erreur parsing JSON IA après nettoyage', rawText, cleanedJsonString });
     }
 
@@ -268,27 +274,4 @@ ${text}
     console.error('❌ Erreur côté serveur :', error);
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
   }
-});
-// Génération de codes pour l'admin
-app.post('/api/admin/generate', async (req, res) => {
-  const { count, durationDays } = req.body;
-
-  if (!count || !durationDays) {
-    return res.status(400).json({ success: false, message: 'Champs requis manquants' });
-  }
-
-  const codes = [];
-
-  for (let i = 0; i < count; i++) {
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const newLicense = new License({
-      code,
-      durationDays,
-    });
-
-    await newLicense.save();
-    codes.push(newLicense);
-  }
-
-  res.json({ success: true, codes });
 });

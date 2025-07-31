@@ -1,0 +1,19 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model License {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  durationDays Int
+  createdAt    DateTime @default(now())
+  usedAt       DateTime?
+  deviceId     String?
+}
