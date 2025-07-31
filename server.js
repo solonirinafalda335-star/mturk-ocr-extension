@@ -106,28 +106,36 @@ app.get('/api/admin/licenses', async (req, res) => {
 
 // --- API Admin Generate Licenses ---
 app.post('/api/admin/generate', async (req, res) => {
-  const { count, durationDays } = req.body;
+  const count = parseInt(req.body.count, 10);
+const durationDays = parseInt(req.body.durationDays, 10);
 
-  if (!count || !durationDays) {
-    return res.status(400).json({ success: false, message: 'Champs requis manquants' });
+
+  if (isNaN(count) || isNaN(durationDays)) {
+    return res.status(400).json({ success: false, message: 'count et durationDays doivent être des nombres' });
   }
 
   const codes = [];
 
-  for (let i = 0; i < count; i++) {
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+  try {
+    for (let i = 0; i < count; i++) {
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
 
-    const newLicense = await prisma.license.create({
-      data: {
-        code,
-        durationDays,
-      }
-    });
+      const newLicense = await prisma.license.create({
+        data: {
+          code,
+          durationDays,
+        }
+      });
 
-    codes.push(newLicense);
+      codes.push(newLicense);
+    }
+
+    res.json({ success: true, codes });
+
+  } catch (err) {
+    console.error("❌ Erreur lors de la génération des licences :", err);
+    res.status(500).json({ success: false, message: "Erreur serveur", error: err.message });
   }
-
-  res.json({ success: true, codes });
 });
 
 // --- Cohere Setup ---
