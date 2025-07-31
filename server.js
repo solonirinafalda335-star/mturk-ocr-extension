@@ -53,7 +53,6 @@ licenseSchema.virtual('expiresAt').get(function () {
   return new Date(this.createdAt.getTime() + this.durationDays * 24 * 60 * 60 * 1000);
 });
 
-// ✅ Route d’activation de licence (depuis l’app utilisateur)
 app.post('/api/activate', async (req, res) => {
   const { code, deviceId } = req.body;
 
@@ -64,15 +63,14 @@ app.post('/api/activate', async (req, res) => {
   const cleanedCode = code.trim().toUpperCase();
 
   try {
-    const license = await License.findOne({ code });
+    const license = await License.findOne({ code: cleanedCode }); // ← tu utilisais "code" non nettoyé ici
 
-if (!license || license.deviceId) {
-  return res.status(400).json({ error: '🚫 Code invalide ou déjà utilisé.' });
-}
+    if (!license) {
+      return res.status(400).json({ success: false, message: '🚫 Code invalide.' });
+    }
 
-   if (license.deviceId && license.deviceId !== deviceId) {
-  return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé sur un autre appareil' });
-
+    if (license.deviceId && license.deviceId !== deviceId) {
+      return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé sur un autre appareil' });
     }
 
     license.deviceId = deviceId;
