@@ -205,54 +205,6 @@ app.post('/api/test-cleanup', (req, res) => {
   }
 });
 
-app.post('/api/enhance-text', async (req, res) => {
-  try {
-    const { text } = req.body;
-
-    if (!text || typeof text !== 'string' || text.trim() === '') {
-      return res.status(400).json({ error: 'Le champ "text" est requis et doit être une chaîne non vide' });
-    }
-
-    const prompt = `...${text}`;
-
-    const response = await cohere.generate({
-      model: 'command',
-      prompt,
-      max_tokens: 600,
-      temperature: 0.3,
-      stop_sequences: ["\n\n"],
-    });
-
-    const rawText = response.generations?.[0]?.text?.trim();
-    if (!rawText) {
-      return res.status(500).json({ error: 'Réponse vide de Cohere' });
-    }
-
-    const firstBrace = rawText.indexOf('{');
-    const lastBrace = rawText.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace === -1) {
-      return res.status(500).json({ error: 'Pas de JSON détecté dans la réponse', rawText });
-    }
-
-    const jsonString = rawText.substring(firstBrace, lastBrace + 1);
-    const cleanedJsonString = sanitizeJSONText(jsonString);
-
-    let jsonResult;
-    try {
-      jsonResult = JSON.parse(cleanedJsonString);
-    } catch (e) {
-      console.error('⛔ Erreur parsing JSON IA après nettoyage:', e.message);
-      return res.status(500).json({ error: 'Erreur parsing JSON IA après nettoyage', rawText, cleanedJsonString });
-    }
-
-    return res.json(jsonResult);
-
-  } catch (error) {
-    console.error('❌ Erreur côté serveur :', error);
-    return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
-  }
-});
-
 app.get("/api/validate", async (req, res) => {
   const { code, device } = req.query;
 
@@ -266,23 +218,21 @@ app.get("/api/validate", async (req, res) => {
     });
 
     if (!license) {
-      return res.json({ status: "invalid", message: "Code non trouvé" });
+      return res.json({ status: "invalid" });
     }
 
-    // Vérifie si la licence a déjà été utilisée par un autre appareil
     if (license.usedAt && license.deviceId && license.deviceId !== device) {
-      return res.json({ status: "invalid", message: "Code déjà utilisé sur un autre appareil" });
+      return res.json({ status: "invalid", message: "Déjà utilisé" });
     }
 
-    // Calcule la date d'expiration à partir de la date de création et durée
+    // ✅ Calcule dynamique de la date d'expiration
     const expiresAt = computeExpiresAt(new Date(license.createdAt), license.durationDays);
 
-    // Vérifie si le code est expiré
     if (new Date() > expiresAt) {
-      return res.json({ status: "expired", message: "Code expiré" });
+      return res.json({ status: "expired" });
     }
 
-    // Si le code n’a jamais été utilisé, l’activer maintenant
+    // Si jamais deviceId ou usedAt n'étaient pas encore définis, on les définit maintenant
     if (!license.usedAt || !license.deviceId) {
       await prisma.license.update({
         where: { code: code.trim().toUpperCase() },
@@ -293,7 +243,6 @@ app.get("/api/validate", async (req, res) => {
       });
     }
 
-    // Répond avec la date d’expiration
     return res.json({
       status: "valid",
       expires: expiresAt.toISOString().split("T")[0],
