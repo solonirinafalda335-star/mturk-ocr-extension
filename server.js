@@ -34,7 +34,6 @@ function computeExpiresAt(createdAt, durationDays) {
   return new Date(createdAt.getTime() + durationDays * 86400000);
 }
 
-// --- API Activate License ---
 app.post('/api/activate', async (req, res) => {
   const { code, deviceId } = req.body;
 
@@ -48,11 +47,11 @@ app.post('/api/activate', async (req, res) => {
     const license = await prisma.license.findUnique({ where: { code: cleanedCode } });
 
     if (!license) {
-      return res.status(400).json({ success: false, message: '🚫 Code invalide.' });
+      return res.status(400).json({ success: false, message: '❌ Code invalide.' });
     }
 
     if (license.deviceId && license.deviceId !== deviceId) {
-      return res.status(400).json({ success: false, message: '🚫 Code déjà utilisé sur un autre appareil' });
+      return res.status(400).json({ success: false, message: '❌ Code déjà utilisé sur un autre appareil' });
     }
 
     await prisma.license.update({
@@ -72,7 +71,6 @@ app.post('/api/activate', async (req, res) => {
   }
 });
 
-// --- API Admin Login ---
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -83,7 +81,6 @@ app.post('/api/admin/login', async (req, res) => {
   }
 });
 
-// --- API Admin Get Licenses ---
 app.get('/api/admin/licenses', async (req, res) => {
   try {
     const licenses = await prisma.license.findMany();
@@ -104,11 +101,9 @@ app.get('/api/admin/licenses', async (req, res) => {
   }
 });
 
-// --- API Admin Generate Licenses ---
 app.post('/api/admin/generate', async (req, res) => {
   const count = parseInt(req.body.count, 10);
-const durationDays = parseInt(req.body.durationDays, 10);
-
+  const durationDays = parseInt(req.body.durationDays, 10);
 
   if (isNaN(count) || isNaN(durationDays)) {
     return res.status(400).json({ success: false, message: 'count et durationDays doivent être des nombres' });
@@ -138,12 +133,10 @@ const durationDays = parseInt(req.body.durationDays, 10);
   }
 });
 
-// --- Cohere Setup ---
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY,
 });
 
-// --- OCR JSON Cleanup ---
 function sanitizeJSONText(rawText) {
   let text = rawText;
 
@@ -192,7 +185,6 @@ function sanitizeJSONText(rawText) {
   return text;
 }
 
-// --- API OCR Cleanup Test ---
 app.post('/api/test-cleanup', (req, res) => {
   const { rawJson } = req.body;
 
@@ -213,7 +205,6 @@ app.post('/api/test-cleanup', (req, res) => {
   }
 });
 
-// --- API OCR Enhance via Cohere ---
 app.post('/api/enhance-text', async (req, res) => {
   try {
     const { text } = req.body;
@@ -222,29 +213,7 @@ app.post('/api/enhance-text', async (req, res) => {
       return res.status(400).json({ error: 'Le champ "text" est requis et doit être une chaîne non vide' });
     }
 
-    const prompt = `
-Voici un texte brut OCR extrait d’une facture.
-Merci de me fournir un JSON structuré avec les champs suivants :
-
-- imageQuality : "Good quality image" ou "Poor quality image"
-- storeName : nom du magasin (ex: Walmart) ou null
-- storePhone : numéro de téléphone (chiffres uniquement) ou null
-- storeAddress : adresse complète ou null
-- purchaseDate : date d’achat au format mm/dd/yyyy ou null
-- purchaseTime : heure d’achat au format HH:MM AM/PM ou null
-- totalPaid : montant total payé ou null
-- products : liste d’articles, chaque article contient :
-  - description (texte)
-  - code (texte ou chiffres)
-  - quantity (nombre)
-  - price (montant)
-
-Si un champ est introuvable, mets null.
-Renvoie uniquement le JSON, sans explications ni texte additionnel.
-
-Texte OCR :
-${text}
-`;
+    const prompt = `...${text}`;
 
     const response = await cohere.generate({
       model: 'command',
@@ -281,5 +250,57 @@ ${text}
   } catch (error) {
     console.error('❌ Erreur côté serveur :', error);
     return res.status(500).json({ error: 'Erreur lors de la génération Cohere' });
+  }
+});
+
+app.get("/api/validate", async (req, res) => {
+  const { code, device } = req.query;
+
+  if (!code || !device) {
+    return res.status(400).json({ status: "invalid", message: "Paramètres manquants" });
+  }
+
+  try {
+    const license = await prisma.license.findUnique({
+      where: { code: code.trim().toUpperCase() },
+    });
+
+    if (!license) {
+      return res.json({ status: "invalid", message: "Code non trouvé" });
+    }
+
+    // Vérifie si la licence a déjà été utilisée par un autre appareil
+    if (license.usedAt && license.deviceId && license.deviceId !== device) {
+      return res.json({ status: "invalid", message: "Code déjà utilisé sur un autre appareil" });
+    }
+
+    // Calcule la date d'expiration à partir de la date de création et durée
+    const expiresAt = computeExpiresAt(new Date(license.createdAt), license.durationDays);
+
+    // Vérifie si le code est expiré
+    if (new Date() > expiresAt) {
+      return res.json({ status: "expired", message: "Code expiré" });
+    }
+
+    // Si le code n’a jamais été utilisé, l’activer maintenant
+    if (!license.usedAt || !license.deviceId) {
+      await prisma.license.update({
+        where: { code: code.trim().toUpperCase() },
+        data: {
+          usedAt: new Date(),
+          deviceId: device,
+        },
+      });
+    }
+
+    // Répond avec la date d’expiration
+    return res.json({
+      status: "valid",
+      expires: expiresAt.toISOString().split("T")[0],
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur validate:", err);
+    return res.status(500).json({ status: "error", message: "Erreur serveur" });
   }
 });
